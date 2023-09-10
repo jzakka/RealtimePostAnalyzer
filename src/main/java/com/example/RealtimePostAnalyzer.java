@@ -21,7 +21,7 @@ public class RealtimePostAnalyzer {
     private final static Logger logger = LoggerFactory.getLogger(RealtimePostAnalyzer.class);
     private static final String APP_ID = "realtime-post-analyzer";
     private static final String BOOTSTRAP_SERVER = "my-kafka:9092";
-    private static final String MYSQL_LOG_TOPIC = "mysql-.alert_dangerous_posts.posts";
+    private static final String MYSQL_LOG_TOPIC = "log.alert_dangerous_posts.posts";
     private static final String POSTS = "posts";
     private static final String HOURLY_POSTS_TOPIC = "hourly_posts";
     private static final String DANGEROUS_POSTS_TOPIC = "dangerous_posts";
@@ -37,12 +37,12 @@ public class RealtimePostAnalyzer {
         config.put(StreamsConfig.APPLICATION_ID_CONFIG, APP_ID);
         config.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, BOOTSTRAP_SERVER);
         config.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass());
-        config.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass());
+        config.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, logSerdes.getClass());
 
         StreamsBuilder builder = new StreamsBuilder();
 
-        KStream<String, String> hourlyPostsCounter = createHourlyPostsCounter(builder);
-        KStream<String, String> dangerousPostsFilter = createDangerousPostsFilter(builder);
+        KStream<String, Log> hourlyPostsCounter = createHourlyPostsCounter(builder);
+        KStream<String, Log> dangerousPostsFilter = createDangerousPostsFilter(builder);
         KStream<String, Log> logToPostsMapper = createLogToPostsMapper(builder);
 
         KafkaStreams streams = new KafkaStreams(builder.build(), config);
@@ -56,17 +56,18 @@ public class RealtimePostAnalyzer {
 
         logToPostsMapper
                 .filter((key, value) -> "c".equals(value.getPayload().get("__op")))
-                .map(((key, value) -> new KeyValue<>(key, value.toString())))
-                .to(POSTS, Produced.with(Serdes.String(), Serdes.String()));
+                .map((KeyValue::new))
+                .to(POSTS);
 
         return logToPostsMapper;
     }
 
-    private static KStream<String, String> createDangerousPostsFilter(StreamsBuilder builder) {
-        KStream<String, String> dangerousPostsFilter = builder.stream(POSTS);
+    private static KStream<String, Log> createDangerousPostsFilter(StreamsBuilder builder) {
+        KStream<String, Log> dangerousPostsFilter = builder.stream(POSTS, Consumed.with(Serdes.String(), logSerdes));
 
         dangerousPostsFilter
-                .filter(((key, value) -> isDangerous(value)))
+                .filter(((key, value) -> isDangerous(value.toString())))
+                .map((key, value) -> new KeyValue<>("POST", value.toString()))
                 .to(DANGEROUS_POSTS_TOPIC, Produced.with(Serdes.String(), Serdes.String()));
 
         return dangerousPostsFilter;
@@ -82,21 +83,18 @@ public class RealtimePostAnalyzer {
         return false;
     }
 
-    private static KStream<String, String> createHourlyPostsCounter(StreamsBuilder builder) {
-        KStream<String, String> hourlyPostsCounter = builder.stream(MYSQL_LOG_TOPIC);
+    private static KStream<String, Log> createHourlyPostsCounter(StreamsBuilder builder) {
+        KStream<String, Log> hourlyPostsCounter = builder.stream(MYSQL_LOG_TOPIC, Consumed.with(Serdes.String(), logSerdes));
 
         hourlyPostsCounter
+                .selectKey(((key, value) -> value.getPayload().get("__op")))
                 .groupByKey()
                 .windowedBy(TimeWindows.ofSizeWithNoGrace(Duration.ofSeconds(10)))
                 .count()
-                .toStream((Windowed<String> key, Long val) -> {
-                    String start = dateFormat.format(new Date(key.window().start()));
-                    String end = dateFormat.format(new Date(key.window().end()));
-                    String newKey = start + " ~ " + end;
-                    return KeyValue.pair(newKey, val);
-                })
-                .map((KeyValue<String, Long> kv, Long v) -> new KeyValue<>(kv.key, v.toString()))
-                .to(HOURLY_POSTS_TOPIC, Produced.with(Serdes.String(), Serdes.String()));
+                .toStream()
+                .foreach((key, value) -> logger.info("[" + key.window().startTime() + "~" + key.window().endTime() + "]" + " = " + value));
+//                .map((KeyValue<String, Long> kv, Long v) -> new KeyValue<>(kv.key, v.toString()))
+//                .to(HOURLY_POSTS_TOPIC, Produced.with(Serdes.String(), Serdes.String()));
 
         return hourlyPostsCounter;
     }
