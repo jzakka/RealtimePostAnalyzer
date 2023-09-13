@@ -45,7 +45,7 @@ public class CrawledPostAnalyzer {
 
     private static boolean isDangerous(String value) {
         String filterPath = getFilterPath();
-        logger.info("python.path=" + filterPath);
+//        logger.info("python.path=" + filterPath);
         ProcessBuilder judgeBuilder = new ProcessBuilder("python", filterPath, value);
 
         try {
@@ -57,7 +57,7 @@ public class CrawledPostAnalyzer {
             }
 
             String result = getResult(judge);
-            logger.info("python.result=" + result);
+//            logger.info("python.result=" + result);
 
             return result.equals("dangerous");
         } catch (Exception e) {
