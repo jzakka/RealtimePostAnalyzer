@@ -18,7 +18,7 @@ import java.util.Properties;
 public class CrawledPostAnalyzer {
     private static Logger logger = LoggerFactory.getLogger(CrawledPostAnalyzer.class);
     private static final String APP_ID = "crawled-post-analyzer";
-    private static final String BOOTSTRAP_SERVER = "my-kafka:9092";
+    private static final String BOOTSTRAP_SERVER = "kafka.lwu.me:9093";
     private static final String POSTS = "posts";
     private static final String DANGEROUS_POSTS = "dangerous_posts";
     private static final String FILTER_PATH = "Filter";
