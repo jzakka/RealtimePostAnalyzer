@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
@@ -31,9 +32,9 @@ public class KeywordMatchFilter implements Filter{
 
     @SneakyThrows
     @Override
-    public boolean filter(String message) {
-        String filterPath = getFilterPath();
-        ProcessBuilder judgeBuilder = new ProcessBuilder("python", filterPath, message);
+    public boolean filter(File script, String message) {
+//        String filterPath = getFilterPath();
+        ProcessBuilder judgeBuilder = new ProcessBuilder("python", script.getAbsolutePath(), message);
 
         Process judge = judgeBuilder.start();
         int exitCode = judge.waitFor();
